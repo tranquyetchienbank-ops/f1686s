@@ -14,6 +14,10 @@ app.get('/', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0a0a">
   <title>f1686s.com</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,21 +30,42 @@ app.get('/', (req, res) => {
       top: 0;
       left: 0;
       overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
+    /* Ẩn thanh địa chỉ trên Safari */
     #mainFrame {
       width: 100vw;
       height: 100vh;
-      height: calc(100vh - env(safe-area-inset-bottom));
+      height: -webkit-fill-available;
+      height: fill-available;
+      height: 100dvh;
       border: none;
       display: block;
       position: fixed;
       top: 0;
       left: 0;
       background: #fff;
+      z-index: 1;
+    }
+    /* Lớp phủ chặn tương tác với thanh điều hướng */
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 99999;
+      pointer-events: none;
+      background: transparent;
+    }
+    #overlay.active {
+      pointer-events: all;
     }
     #toast {
       position: fixed;
-      bottom: 30px;
+      bottom: 40px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0,0,0,0.85);
@@ -52,7 +77,7 @@ app.get('/', (req, res) => {
       opacity: 0;
       transition: opacity 0.5s;
       pointer-events: none;
-      z-index: 9999;
+      z-index: 999999;
       white-space: nowrap;
       backdrop-filter: blur(8px);
       border: 1px solid rgba(255,255,255,0.1);
@@ -68,20 +93,63 @@ app.get('/', (req, res) => {
       border-radius: 12px;
       font-size: 11px;
       font-family: monospace;
-      z-index: 9998;
+      z-index: 999998;
       opacity: 0.7;
       pointer-events: none;
+    }
+    /* Safari fullscreen fix */
+    @supports (-webkit-touch-callout: none) {
+      #mainFrame {
+        height: -webkit-fill-available;
+      }
+      body {
+        min-height: -webkit-fill-available;
+      }
+    }
+    /* Chrome fullscreen */
+    :-webkit-full-screen #mainFrame {
+      height: 100vh;
+    }
+    :fullscreen #mainFrame {
+      height: 100vh;
     }
   </style>
 </head>
 <body>
-<iframe id="mainFrame" src="https://f1686s.com/home/mine" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation"></iframe>
+<iframe id="mainFrame" src="https://f1686s.com/home/mine" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation" allowfullscreen></iframe>
+<div id="overlay"></div>
 <div id="status">● SCRIPT</div>
 <div id="toast">✅ Đã kích hoạt tự động</div>
 
 <script>
   (function() {
     'use strict';
+
+    // === YÊU CẦU TOÀN MÀN HÌNH ===
+    function requestFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+    }
+
+    // Gọi fullscreen khi có tương tác
+    document.addEventListener('touchstart', function firstTouch() {
+      requestFullscreen();
+      document.removeEventListener('touchstart', firstTouch);
+    }, { once: true });
+
+    document.addEventListener('click', function firstClick() {
+      requestFullscreen();
+      document.removeEventListener('click', firstClick);
+    }, { once: true });
+
+    // Tự động fullscreen sau 1s nếu chưa có tương tác
+    setTimeout(requestFullscreen, 1000);
 
     // === NHÚNG TOÀN BỘ FILE TAMPERMONKEY VÀO ĐÂY ===
     ${tmScript}
@@ -94,7 +162,6 @@ app.get('/', (req, res) => {
       try {
         const doc = frame.contentDocument;
         if (!doc) return;
-        // Chạy patch trong context của iframe
         const win = frame.contentWindow;
         if (!win) return;
 
@@ -191,7 +258,6 @@ app.get('/', (req, res) => {
         \`;
         win.document.body.appendChild(script);
 
-        // Gọi findAndPatch trực tiếp
         const btn = doc.getElementById('depositSubmitClick');
         if (btn && !patched.has(btn)) { patchButton(btn); }
       } catch(e) {
@@ -206,6 +272,8 @@ app.get('/', (req, res) => {
         setTimeout(findAndPatch, 500);
         setTimeout(findAndPatch, 1500);
         setTimeout(findAndPatch, 3000);
+        // Yêu cầu fullscreen lại sau khi iframe load
+        setTimeout(requestFullscreen, 1000);
       });
     }
 
@@ -229,10 +297,38 @@ app.get('/', (req, res) => {
       }
     }, { passive: false });
 
-    // Fake URL hiển thị trên thanh địa chỉ (chỉ áp dụng cho PWA)
+    // Chặn pull-to-refresh
+    document.addEventListener('touchstart', function(e) {
+      if (window.scrollY === 0 && e.touches[0].clientY < 50) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    // Ẩn thanh địa chỉ bằng cách scroll nhẹ (Chrome)
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        window.scrollTo(0, 1);
+        window.scrollTo(0, 0);
+      }, 100);
+    });
+
+    // Fake URL hiển thị trên thanh địa chỉ (PWA)
     if (window.history && window.history.pushState) {
       window.history.pushState({}, 'f1686s.com', '/');
     }
+
+    // Lớp phủ chặn thanh điều hướng (Safari)
+    const overlay = document.getElementById('overlay');
+    overlay.classList.add('active');
+    setTimeout(() => overlay.classList.remove('active'), 2000);
+
+    // Thoát fullscreen khi bấm back (tránh kẹt)
+    window.addEventListener('popstate', function() {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
   })();
 </script>
 </body>
