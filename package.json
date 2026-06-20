@@ -1,12 +1,14 @@
 {
-  "name": "f168-inject",
+  "name": "f168-proxy",
   "version": "1.0.0",
-  "description": "Cloud web với Tampermonkey nhúng trực tiếp",
+  "description": "Proxy for f1686s with injected user script",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12"
   }
 }
