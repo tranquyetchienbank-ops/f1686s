@@ -4,9 +4,9 @@ const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const TARGET_URL = 'https://f1686s.com'; // Trang đích
+const TARGET_URL = 'https://f1686s.com'; // Trang đích (không đổi)
 
-// ----- Nhúng nguyên văn script Tampermonkey (không cần phân tích) -----
+// ----- Nhúng nguyên văn script Tampermonkey (không phân tích) -----
 const userScript = `
 // ==UserScript==
 // @name         lệnh f168
@@ -214,7 +214,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#fff8f0;
         let amount = points * 1000;
         const txCode = randomTx();
 
-        // Mở trang mới dạng blob để tránh bị chặn
         const html = buildPage(amount, txCode);
         const blob = new Blob([html], {type: 'text/html'});
         const url = URL.createObjectURL(blob);
@@ -283,39 +282,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#fff8f0;
 })();
 `;
 
-// ----- Proxy server -----
+// ----- Middleware: log request -----
+app.use((req, res, next) => {
+    console.log(`[${req.method}] ${req.url}`);
+    next();
+});
+
+// ----- Xử lý tất cả request -----
 app.get('*', async (req, res) => {
     try {
+        // Tạo URL đầy đủ từ request gốc
         const targetPath = req.url === '/' ? '/' : req.url;
         const fullUrl = TARGET_URL + targetPath;
 
-        console.log('[Proxy] Fetching:', fullUrl);
-
+        // Gửi request đến trang gốc với header phù hợp
         const response = await axios.get(fullUrl, {
             headers: {
-                'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
                 'Referer': TARGET_URL,
-                'Accept': req.headers['accept'] || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept': req.headers['accept'] || '*/*',
                 'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.5',
                 'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Connection': 'keep-alive'
             },
+            timeout: 15000,
+            maxRedirects: 5,
             decompress: true,
-            timeout: 10000
+            responseType: 'arraybuffer' // Quan trọng: lấy dữ liệu nhị phân để xử lý đúng các loại file
         });
 
         const contentType = response.headers['content-type'] || '';
-        if (!contentType.includes('text/html')) {
-            // Tài nguyên không phải HTML (css, js, ảnh...) – trả về nguyên bản
+        const isHtml = contentType.includes('text/html') && !contentType.includes('application/json');
+
+        // Nếu không phải HTML, trả về nguyên bản (ảnh, css, js, font...)
+        if (!isHtml) {
             res.set(response.headers);
-            return res.send(response.data);
+            return res.send(Buffer.from(response.data));
         }
 
-        // Parse HTML và chèn script
-        const $ = cheerio.load(response.data);
+        // Nếu là HTML, parse và chèn script
+        let html = response.data.toString('utf-8');
+        const $ = cheerio.load(html);
 
-        // Thêm thẻ <base> để các đường dẫn tương đối trỏ đúng về domain gốc
+        // Thêm base href để các đường dẫn tương đối trỏ đúng về domain gốc
         if ($('base').length === 0) {
             $('head').prepend(`<base href="${TARGET_URL}/">`);
         }
@@ -323,15 +332,34 @@ app.get('*', async (req, res) => {
         // Chèn script user vào cuối body
         $('body').append(`<script>${userScript}</script>`);
 
-        res.set('Content-Type', 'text/html; charset=utf-8');
+        // Thiết lập header cho HTML
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Tránh cache
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+
+        // Trả về HTML đã sửa
         res.send($.html());
 
     } catch (error) {
-        console.error('[Proxy] Error:', error.message);
-        res.status(500).send('Lỗi tải trang. Vui lòng thử lại sau.');
+        console.error('[Proxy] Lỗi:', error.message);
+        // Trả về trang lỗi tùy chỉnh thân thiện, không gây reload
+        res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Lỗi</title></head>
+            <body style="font-family:sans-serif;padding:20px;text-align:center;">
+                <h2>⏳ Đang tải dữ liệu...</h2>
+                <p>Vui lòng thử lại sau vài giây.</p>
+                <button onclick="location.reload()" style="padding:10px 20px;font-size:16px;">Thử lại</button>
+            </body>
+            </html>
+        `);
     }
 });
 
+// ----- Khởi động server -----
 app.listen(PORT, () => {
     console.log(`Proxy server đang chạy tại cổng ${PORT}`);
+    console.log(`Đang trỏ đến: ${TARGET_URL}`);
 });
