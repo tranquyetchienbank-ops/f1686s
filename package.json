@@ -1,0 +1,12 @@
+{
+  "name": "f168-inject",
+  "version": "1.0.0",
+  "description": "Inject script vào f1686s.com",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
