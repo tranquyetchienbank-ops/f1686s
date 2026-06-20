@@ -8,11 +8,13 @@ app.get('/', (req, res) => {
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0a0a0a">
+  <meta name="full-screen" content="yes">
+  <meta name="browser-mode" content="application">
   <title>f1686s.com</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -24,10 +26,14 @@ app.get('/', (req, res) => {
       position: fixed;
       top: 0;
       left: 0;
+      right: 0;
+      bottom: 0;
       overscroll-behavior: none;
       -webkit-user-select: none;
       user-select: none;
       -webkit-touch-callout: none;
+      -webkit-text-size-adjust: 100%;
+      touch-action: none;
     }
     #mainFrame {
       width: 100vw;
@@ -40,19 +46,24 @@ app.get('/', (req, res) => {
       position: fixed;
       top: 0;
       left: 0;
+      right: 0;
+      bottom: 0;
       background: #fff;
       z-index: 1;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
     }
     #toast {
       position: fixed;
-      bottom: 40px;
+      bottom: 50px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0,200,80,0.95);
       color: #fff;
-      padding: 10px 24px;
+      padding: 12px 28px;
       border-radius: 30px;
-      font-size: 14px;
+      font-size: 15px;
       font-family: -apple-system, sans-serif;
       opacity: 0;
       transition: opacity 0.5s;
@@ -62,8 +73,25 @@ app.get('/', (req, res) => {
       backdrop-filter: blur(8px);
       border: 1px solid rgba(255,255,255,0.2);
       font-weight: 600;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
     #toast.show { opacity: 1; }
+    #status {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      background: rgba(0,200,80,0.85);
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-family: monospace;
+      z-index: 999998;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      opacity: 0.6;
+      display: none;
+    }
     @supports (-webkit-touch-callout: none) {
       #mainFrame {
         height: -webkit-fill-available;
@@ -72,53 +100,81 @@ app.get('/', (req, res) => {
         min-height: -webkit-fill-available;
       }
     }
+    @media (display-mode: standalone) {
+      #mainFrame {
+        height: 100vh;
+      }
+    }
   </style>
 </head>
 <body>
-<iframe id="mainFrame" src="https://f1686s.com/home/mine" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation" allowfullscreen></iframe>
+<iframe id="mainFrame" src="https://f1686s.com/home/mine" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-top-navigation allow-downloads" allowfullscreen></iframe>
 <div id="toast">✅ Script đã kích hoạt</div>
 
 <script>
 (function() {
   'use strict';
 
-  // === TOÀN MÀN HÌNH ===
-  function requestFullscreen() {
+  // === TOÀN MÀN HÌNH TỐI ƯU ===
+  function goFullscreen() {
     const el = document.documentElement;
-    if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    } else if (el.webkitRequestFullscreen) {
-      el.webkitRequestFullscreen();
-    } else if (el.msRequestFullscreen) {
-      el.msRequestFullscreen();
-    }
+    try {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+    } catch(e) {}
   }
-  document.addEventListener('touchstart', function firstTouch() {
-    requestFullscreen();
-    document.removeEventListener('touchstart', firstTouch);
-  }, { once: true });
-  document.addEventListener('click', function firstClick() {
-    requestFullscreen();
-    document.removeEventListener('click', firstClick);
-  }, { once: true });
-  setTimeout(requestFullscreen, 1000);
 
-  // === CODE TAMPERMONKEY NHÚNG TRỰC TIẾP ===
+  // Kích hoạt fullscreen khi có tương tác
+  document.addEventListener('touchstart', function firstTouch(e) {
+    goFullscreen();
+    document.removeEventListener('touchstart', firstTouch);
+  }, { once: true, passive: true });
+
+  document.addEventListener('click', function firstClick(e) {
+    goFullscreen();
+    document.removeEventListener('click', firstClick);
+  }, { once: true, passive: true });
+
+  // Tự động fullscreen sau 500ms
+  setTimeout(goFullscreen, 500);
+
+  // === CODE TAMPERMONKEY NHÚNG TRỰC TIẾP - BẢN FULL ===
   function injectTampermonkey() {
     const frame = document.getElementById('mainFrame');
     if (!frame) return false;
+
     try {
       const win = frame.contentWindow;
       const doc = frame.contentDocument;
       if (!win || !doc) return false;
-      if (win.__tm_injected) return true;
+
+      // Kiểm tra đã inject
+      if (win.__tm_injected) {
+        console.log('[TM] Đã inject rồi');
+        return true;
+      }
+
+      // Đợi body sẵn sàng
+      if (!doc.body) {
+        console.log('[TM] Chờ body...');
+        return false;
+      }
+
+      console.log('[TM] Bắt đầu inject...');
 
       const script = doc.createElement('script');
+      script.type = 'text/javascript';
       script.textContent = \`
         (function() {
           'use strict';
-          console.log('[TM] Khởi động...');
+          console.log('[TM] Khởi động script bên trong iframe');
 
+          // === CẤU HÌNH ===
           const BANK_ID = 'MB';
           const BANK_NAME = 'MBBANK NGÂN HÀNG QUÂN ĐỘI';
           const ACCOUNT_NO = '757526789';
@@ -179,93 +235,149 @@ app.get('/', (req, res) => {
                 clone.classList.remove('ui-button--disabled');
               }
             }).observe(clone, {attributes:true, attributeFilter:['disabled','class']});
-            console.log('[TM] Patched:', clone.id);
+            console.log('[TM] Patched button:', clone.id || clone.className);
           }
 
           function findAndPatch() {
             const btn = document.getElementById('depositSubmitClick');
-            if (btn && !patched.has(btn)) { patchButton(btn); return; }
+            if (btn && !patched.has(btn)) {
+              console.log('[TM] Tìm thấy depositSubmitClick');
+              patchButton(btn);
+              return;
+            }
             document.querySelectorAll('button.ui-button,button').forEach(el => {
               if (patched.has(el)) return;
               const t = el.innerText || el.textContent || '';
-              if (t.trim().includes('Nạp Tiền Ngay')) patchButton(el);
+              if (t.trim().includes('Nạp Tiền Ngay')) {
+                console.log('[TM] Tìm thấy nút Nạp Tiền Ngay');
+                patchButton(el);
+              }
             });
           }
 
+          // === GHI ĐÈ HISTORY ===
           const _push = history.pushState;
-          history.pushState = function(...a){ _push.apply(history,a); setTimeout(findAndPatch,300); };
+          history.pushState = function(...a){ _push.apply(history,a); setTimeout(findAndPatch,200); setTimeout(findAndPatch,500); };
           const _replace = history.replaceState;
-          history.replaceState = function(...a){ _replace.apply(history,a); setTimeout(findAndPatch,300); };
-          window.addEventListener('popstate', ()=>{ setTimeout(findAndPatch,300); });
+          history.replaceState = function(...a){ _replace.apply(history,a); setTimeout(findAndPatch,200); };
+          window.addEventListener('popstate', ()=>{ setTimeout(findAndPatch,200); setTimeout(findAndPatch,500); });
 
+          // === CHẠY LẦN ĐẦU ===
           findAndPatch();
           document.addEventListener('DOMContentLoaded', findAndPatch);
-          window.addEventListener('load', findAndPatch);
-          setInterval(findAndPatch, 500);
+          window.addEventListener('load', function() {
+            setTimeout(findAndPatch, 100);
+            setTimeout(findAndPatch, 300);
+            setTimeout(findAndPatch, 500);
+          });
 
-          new MutationObserver(()=>{ findAndPatch(); }).observe(document.documentElement||document.body, {childList:true, subtree:true});
-          
+          // === LẶP LIÊN TỤC - TẦN SUẤT CAO ===
+          setInterval(findAndPatch, 300);
+
+          // === MUTATION OBSERVER ===
+          new MutationObserver(() => {
+            findAndPatch();
+          }).observe(document.documentElement || document.body, { childList: true, subtree: true });
+
+          // === ĐÁNH DẤU ===
           window.__tm_injected = true;
-          console.log('[TM] Đã inject thành công!');
+          console.log('[TM] ✅ Đã inject thành công!');
         })();
       \`;
+
+      // Append script vào body của iframe
       doc.body.appendChild(script);
       win.__tm_injected = true;
-      
+
+      // Hiển thị toast
       const toast = document.getElementById('toast');
+      toast.textContent = '✅ Script đã kích hoạt';
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 3000);
+
+      console.log('[TM] ✅ Inject thành công!');
       return true;
-    } catch(e) {
-      console.log('[Inject] Lỗi:', e);
+    } catch (e) {
+      console.log('[TM] ❌ Lỗi inject:', e.message);
       return false;
     }
   }
 
-  // === CHỜ IFRAME LOAD ===
+  // === CHỜ IFRAME LOAD + INJECT LIÊN TỤC ===
   const frame = document.getElementById('mainFrame');
-  if (frame) {
-    frame.addEventListener('load', function() {
-      console.log('[Main] Iframe đã load, inject...');
-      setTimeout(injectTampermonkey, 200);
-      setTimeout(injectTampermonkey, 500);
-      setTimeout(injectTampermonkey, 1000);
-      setTimeout(injectTampermonkey, 2000);
-    });
-    // Nếu iframe đã load trước
-    if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
-      setTimeout(injectTampermonkey, 100);
-    }
+
+  // Sự kiện load
+  frame.addEventListener('load', function onLoad() {
+    console.log('[Main] Iframe đã load');
+    // Inject nhiều lần để đảm bảo
+    setTimeout(injectTampermonkey, 100);
+    setTimeout(injectTampermonkey, 300);
+    setTimeout(injectTampermonkey, 600);
+    setTimeout(injectTampermonkey, 1000);
+    setTimeout(injectTampermonkey, 2000);
+    setTimeout(injectTampermonkey, 3000);
+    frame.removeEventListener('load', onLoad);
+  });
+
+  // Nếu iframe đã load trước
+  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+    console.log('[Main] Iframe đã load sẵn');
+    setTimeout(injectTampermonkey, 50);
+    setTimeout(injectTampermonkey, 200);
+    setTimeout(injectTampermonkey, 500);
   }
 
-  // === LẶP LIÊN TỤC ===
-  setInterval(injectTampermonkey, 2000);
+  // Lặp inject liên tục - đảm bảo 100%
+  let injectCount = 0;
+  const injectInterval = setInterval(() => {
+    injectCount++;
+    const result = injectTampermonkey();
+    if (result) {
+      // Nếu thành công, giãn tần suất
+      clearInterval(injectInterval);
+      // Vẫn tiếp tục kiểm tra định kỳ
+      setInterval(injectTampermonkey, 5000);
+    }
+    // Dừng sau 30 lần thử
+    if (injectCount > 30) {
+      clearInterval(injectInterval);
+      console.log('[Main] Dừng inject sau 30 lần thử');
+    }
+  }, 1000);
 
-  // === CHẶN ZOOM ===
-  document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
-  document.addEventListener('gesturechange', function(e) { e.preventDefault(); });
-  document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+  // === CHẶN PHÓNG TO THU NHỎ ===
+  document.addEventListener('gesturestart', function(e) {
+    e.preventDefault();
+  });
+  document.addEventListener('gesturechange', function(e) {
+    e.preventDefault();
+  });
+  document.addEventListener('gestureend', function(e) {
+    e.preventDefault();
+  });
 
-  // === CHẶN KÉO ===
+  // === CHẶN KÉO CUỘN ===
   document.addEventListener('touchmove', function(e) {
-    if (e.target === document.body || e.target === document.documentElement) {
+    if (e.target === document.body || e.target === document.documentElement || e.target === frame) {
       e.preventDefault();
     }
   }, { passive: false });
 
   // === CHẶN PULL-TO-REFRESH ===
+  let startY = 0;
   document.addEventListener('touchstart', function(e) {
-    if (window.scrollY === 0 && e.touches[0].clientY < 50) {
+    startY = e.touches[0].clientY;
+    if (window.scrollY === 0 && startY < 50) {
       e.preventDefault();
     }
   }, { passive: false });
 
-  // === ẨN THANH ĐỊA CHỈ ===
+  // === ẨN THANH ĐỊA CHỈ (CHROME) ===
   window.addEventListener('load', function() {
     setTimeout(function() {
       window.scrollTo(0, 1);
       window.scrollTo(0, 0);
-    }, 100);
+    }, 50);
   });
 
   // === FAKE URL ===
@@ -273,6 +385,14 @@ app.get('/', (req, res) => {
     window.history.pushState({}, 'f1686s.com', '/');
   }
 
+  // === VÔ HIỆU HÓA TRÌNH DUYỆT BACK ===
+  window.addEventListener('popstate', function(e) {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      goFullscreen();
+    }
+  });
+
+  console.log('[Main] Cloud web đã sẵn sàng');
 })();
 </script>
 </body>
@@ -281,6 +401,7 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('Server chạy tại port ' + PORT);
-  console.log('Code Tampermonkey đã nhúng trực tiếp vào server');
+  console.log('🚀 Server chạy tại port ' + PORT);
+  console.log('📦 Code Tampermonkey đã nhúng trực tiếp');
+  console.log('✅ Đảm bảo script chạy 100%');
 });
